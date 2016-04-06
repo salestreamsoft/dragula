@@ -25,6 +25,7 @@ function dragula (initialContainers, options) {
   var _renderTimer; // timer for setTimeout renderMirrorImage
   var _lastDropTarget = null; // last container item was over
   var _grabbed; // holds mousedown context until first mousemove
+  var MAX_DISTANCE_TO_DROP_MARKER = 20;
 
   var o = options || {};
   if (o.moves === void 0) { o.moves = always; }
@@ -39,6 +40,14 @@ function dragula (initialContainers, options) {
   if (o.direction === void 0) { o.direction = 'vertical'; }
   if (o.ignoreInputTextSelection === void 0) { o.ignoreInputTextSelection = true; }
   if (o.mirrorContainer === void 0) { o.mirrorContainer = doc.body; }
+  if (o.drop_marker === void 0) { o.drop_marker = false; }
+  if (o.drop_marker_class === void 0) { o.drop_marker_class = 'drop-marker'; }
+
+  if (o.drop_marker) {
+    var _dropMarkers = []; // keeps track of drop marker elements per container
+    var _initialLength;
+    var _initialItems = [];
+  }
 
   var drake = emitter({
     containers: o.containers,
@@ -77,6 +86,13 @@ function dragula (initialContainers, options) {
     var op = remove ? 'remove' : 'add';
     crossvent[op](documentElement, 'selectstart', preventGrabbed); // IE8
     crossvent[op](documentElement, 'click', preventGrabbed);
+    touchy(documentElement, op, 'keydown', cancelOnEsc);
+  }
+
+  function cancelOnEsc (event) {
+    if (event.which === 27 /* ESC */) {
+      cancel();
+    }
   }
 
   function destroy () {
@@ -194,6 +210,11 @@ function dragula (initialContainers, options) {
   }
 
   function start (context) {
+    if (o.drop_marker && o.containers.length !== 1) {
+      console.log('error: dragula currently only supports 1 container when drop_marker mode is turned on');
+      return;
+    }
+
     if (isCopy(context.item, context.source)) {
       _copy = context.item.cloneNode(true);
       drake.emit('cloned', _copy, context.item, 'copy');
@@ -202,6 +223,15 @@ function dragula (initialContainers, options) {
     _source = context.source;
     _item = context.item;
     _initialSibling = _currentSibling = nextEl(context.item);
+
+    if (o.drop_marker) {
+      _initialLength = context.source.children.length;
+      _initialItems = [];
+      for (var i = 0; i < context.source.children.length; i++) {
+        _initialItems.push(context.source.children[i]);
+      }
+      drake.fromIndex = _initialItems.indexOf(_item);
+    }
 
     drake.dragging = true;
     drake.emit('drag', _item, _source);
@@ -242,6 +272,9 @@ function dragula (initialContainers, options) {
       remove();
     } else {
       cancel();
+    }
+    if (o.drop_marker && drake.toIndex !== null) {
+      drake.emit('moved', drake.fromIndex, drake.toIndex);
     }
   }
 
@@ -298,6 +331,9 @@ function dragula (initialContainers, options) {
     var item = _copy || _item;
     ungrab();
     removeMirrorImage();
+    if (o.drop_marker) {
+      hideAllDropMarkers();
+    }
     if (item) {
       classes.rm(item, 'gu-transit');
     }
@@ -348,6 +384,9 @@ function dragula (initialContainers, options) {
   }
 
   function drag (e) {
+    if (o.drop_marker) {
+      return dragForDropMarkerMode(e);
+    }
     if (!_mirror) {
       return;
     }
@@ -402,6 +441,41 @@ function dragula (initialContainers, options) {
     function moved (type) { drake.emit(type, item, _lastDropTarget, _source); }
     function over () { if (changed) { moved('over'); } }
     function out () { if (_lastDropTarget) { moved('out'); } }
+  }
+
+  function dragForDropMarkerMode (e) {
+    if (!_mirror) {
+      return;
+    }
+    e.preventDefault();
+
+    var clientX = getCoord('clientX', e);
+    var clientY = getCoord('clientY', e);
+    var x = clientX - _offsetX;
+    var y = clientY - _offsetY;
+
+    _mirror.style.left = x + 'px';
+    _mirror.style.top = y + 'px';
+
+    var container = o.containers[0];
+    var insertMarkerAt = null; // null means no marker, -1 means marker at end of list
+    if (coordWithinElementLeftRightBoundaries(container, clientX)) {
+      insertMarkerAt = findClosestDropPointVertically(clientY);
+    }
+
+    if (insertMarkerAt === null) {
+      hideDropMarker(container);
+      drake.toIndex = null;
+    } else if (insertMarkerAt === -1) {
+      showDropMarker(container);
+      drake.toIndex = _initialLength - 1;
+    } else {
+      showDropMarker(container, _initialItems[insertMarkerAt]);
+      drake.toIndex = insertMarkerAt;
+      if (drake.toIndex > drake.fromIndex) {
+        drake.toIndex--;
+      }
+    }
   }
 
   function spillOver (el) {
@@ -482,6 +556,102 @@ function dragula (initialContainers, options) {
 
   function isCopy (item, container) {
     return typeof o.copy === 'boolean' ? o.copy : o.copy(item, container);
+  }
+
+  function coordWithinElementLeftRightBoundaries (container, x) {
+    var r = container.getBoundingClientRect();
+    return (x >= r.left) && (x <= r.left + r.width);
+  }
+
+  // assumes only 1 container
+  function findClosestDropPointVertically (y) {
+    var item;
+    var nextItem;
+    var newDistance;
+    var distance = null;
+    var closest = null;
+    for (var i = 0; i < _initialItems.length; i++) {
+      item = _initialItems[i];
+      if (i + 1 < _initialItems.length) {
+        nextItem = _initialItems[i + 1];
+      } else {
+        nextItem = null;
+      }
+      if (item === _item) {
+        continue;
+      }
+      // top and bottom cases
+      if (i === 0 || i === _initialItems.length - 1) {
+        if (i === 0) {
+          newDistance = Math.abs(item.getBoundingClientRect().top - y);
+          useIfCloserAndValid(i, newDistance);
+        }
+        if (i === _initialItems.length - 1) {
+          newDistance = Math.abs(item.getBoundingClientRect().bottom - y);
+          useIfCloserAndValid(-1, newDistance);
+        }
+      }
+      // in-betweens
+      if (nextItem && nextItem !== _item) {
+        var between = (item.getBoundingClientRect().bottom + nextItem.getBoundingClientRect().top) / 2;
+        newDistance = Math.abs(between - y);
+        useIfCloserAndValid(i + 1, newDistance);
+      }
+    }
+    return closest;
+
+    function useIfCloserAndValid(index, newDistance) {
+      if (newDistance < MAX_DISTANCE_TO_DROP_MARKER && (distance === null || newDistance < distance)) {
+        distance = newDistance;
+        closest = index;
+      }
+    }
+  }
+
+  // beforeElement can  be null
+  function showDropMarker (container, beforeElement) {
+    var marker = getDropMarker(container);
+    if (beforeElement) {
+      container.insertBefore(marker, beforeElement);
+    } else {
+      container.appendChild(marker);
+    }
+  }
+
+  function hideDropMarker (container) {
+    var marker = getDropMarker(container);
+    if (container === marker.parentNode) {
+      container.removeChild(marker);
+    }
+  }
+
+  function hideAllDropMarkers () {
+    for (var i = 0; i < _dropMarkers.length; i++) {
+      var container = _dropMarkers[i].container;
+      var marker = _dropMarkers[i].marker;
+      if (container === marker.parentNode) {
+        container.removeChild(marker);
+      }
+    }
+  }
+
+  function getDropMarker (container) {
+    // return existing one
+    for (var i = 0; i < _dropMarkers.length; i++) {
+      var el = _dropMarkers[i];
+      if (el.container === container) {
+        return el.marker;
+      }
+    }
+    // create a new one
+    var marker = document.createElement('div');
+    marker.classList.add(o.drop_marker_class);
+    var newMarker = {
+      container: container,
+      marker: marker
+    };
+    _dropMarkers.push(newMarker);
+    return marker;
   }
 }
 
