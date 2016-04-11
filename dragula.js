@@ -5,6 +5,7 @@ var crossvent = require('crossvent');
 var classes = require('./classes');
 var doc = document;
 var documentElement = doc.documentElement;
+var dragulaInstances = [];
 
 function dragula (initialContainers, options) {
   var len = arguments.length;
@@ -25,7 +26,6 @@ function dragula (initialContainers, options) {
   var _renderTimer; // timer for setTimeout renderMirrorImage
   var _lastDropTarget = null; // last container item was over
   var _grabbed; // holds mousedown context until first mousemove
-  var MAX_DISTANCE_TO_DROP_MARKER = 20;
 
   var o = options || {};
   if (o.moves === void 0) { o.moves = always; }
@@ -42,6 +42,7 @@ function dragula (initialContainers, options) {
   if (o.mirrorContainer === void 0) { o.mirrorContainer = doc.body; }
   if (o.drop_marker === void 0) { o.drop_marker = false; }
   if (o.drop_marker_class === void 0) { o.drop_marker_class = 'drop-marker'; }
+  if (o.drop_marker_distance_to_pointer === void 0) { o.drop_marker_distance_to_pointer = 20; }
 
   if (o.drop_marker) {
     var _dropMarkers = []; // keeps track of drop marker elements per container
@@ -58,6 +59,47 @@ function dragula (initialContainers, options) {
     destroy: destroy,
     dragging: false
   });
+
+  dragulaInstances.push({
+    instance: drake,
+    containers: o.containers
+  });
+
+  cleanUpDragulaInstances(dragulaInstances);
+
+  /*
+   * removes dragula instances in the dragulaInstances array whose containers are no longer attached to the DOM
+   */
+  function cleanUpDragulaInstances (instances) {
+    for (var i = instances.length - 1; i >= 0; i--) {
+      var el = instances[i];
+      for (var j = el.containers.length - 1; j >= 0; j--) {
+        var container = el.containers[j];
+        if (isAttachedToDom(container)) {
+          break;
+        }
+      }
+      if (j === -1) {
+        // none of this instance's containers are attached, so remove from list of instances
+        instances.splice(i, 1);
+      }
+    }
+  }
+
+  function isAttachedToDom(elem) {
+    if (elem === documentElement) {
+      return true;
+    } else if (elem.parentNode === null) {
+      return false;
+    }
+    var siblings = elem.parentNode.children;
+    for (var i = 0, c = siblings.length; i < c; i++) {
+      if (siblings[i] === elem) {
+        return isAttachedToDom(elem.parentNode);
+      }
+    }
+    return false;
+  }
 
   if (o.removeOnSpill === true) {
     drake.on('over', spillOver).on('out', spillOut);
@@ -106,6 +148,26 @@ function dragula (initialContainers, options) {
     }
   }
 
+  function findInnerMostDragulaInstance (clientX, clientY) {
+    var innerMostInstance = null;
+    var area = null;
+    for (var i = 0; i < dragulaInstances.length; i++) {
+      var el = dragulaInstances[i];
+      for (var j = 0; j < el.containers.length; j++) {
+        var container = el.containers[j];
+        var rect = container.getBoundingClientRect();
+        if ((clientX >= rect.left) && (clientX <= rect.left + rect.width) && (clientY >= rect.top) && (clientY <= rect.top + rect.height)) {
+          var thisArea = rect.width * rect.height;
+          if (innerMostInstance === null || thisArea < area) {
+            innerMostInstance = el.instance;
+            area = thisArea;
+          }
+        }
+      }
+    }
+    return innerMostInstance;
+  }
+
   function grab (e) {
     _moveX = e.clientX;
     _moveY = e.clientY;
@@ -115,7 +177,7 @@ function dragula (initialContainers, options) {
       return; // we only care about honest-to-god left clicks and touch events
     }
     var item = e.target;
-    var context = canStart(item);
+    var context = canStart(item, e.clientX, e.clientY);
     if (!context) {
       return;
     }
@@ -166,7 +228,7 @@ function dragula (initialContainers, options) {
     drag(e);
   }
 
-  function canStart (item) {
+  function canStart (item, clientX, clientY) {
     if (drake.dragging && _mirror) {
       return;
     }
@@ -189,6 +251,13 @@ function dragula (initialContainers, options) {
     }
     if (o.invalid(item, handle)) {
       return;
+    }
+
+    if (typeof clientX !== 'undefined' && typeof clientY !== 'undefined') {
+      var innerMostDrake = findInnerMostDragulaInstance(clientX, clientY);
+      if (drake !== innerMostDrake) {
+        return;
+      }
     }
 
     var movable = o.moves(item, source, handle, nextEl(item));
@@ -457,6 +526,8 @@ function dragula (initialContainers, options) {
     _mirror.style.left = x + 'px';
     _mirror.style.top = y + 'px';
 
+    drake.emit('dragmove', clientX, clientY);
+
     var container = o.containers[0];
     var insertMarkerAt = null; // null means no marker, -1 means marker at end of list
     if (coordWithinElementLeftRightBoundaries(container, clientX)) {
@@ -601,7 +672,7 @@ function dragula (initialContainers, options) {
     return closest;
 
     function useIfCloserAndValid(index, newDistance) {
-      if (newDistance < MAX_DISTANCE_TO_DROP_MARKER && (distance === null || newDistance < distance)) {
+      if (newDistance < o.drop_marker_distance_to_pointer && (distance === null || newDistance < distance)) {
         distance = newDistance;
         closest = index;
       }
