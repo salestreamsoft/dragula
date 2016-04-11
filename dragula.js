@@ -5,7 +5,7 @@ var crossvent = require('crossvent');
 var classes = require('./classes');
 var doc = document;
 var documentElement = doc.documentElement;
-var dragulaInstances = []
+var dragulaInstances = [];
 
 function dragula (initialContainers, options) {
   var len = arguments.length;
@@ -63,9 +63,9 @@ function dragula (initialContainers, options) {
   dragulaInstances.push({
     instance: drake,
     containers: o.containers
-  })
+  });
 
-  cleanUpDragulaInstances(dragulaInstances)
+  cleanUpDragulaInstances(dragulaInstances);
 
   /*
    * removes dragula instances in the dragulaInstances array whose containers are no longer attached to the DOM
@@ -74,31 +74,31 @@ function dragula (initialContainers, options) {
     for (var i = instances.length - 1; i >= 0; i--) {
       var el = instances[i];
       for (var j = el.containers.length - 1; j >= 0; j--) {
-        var container = el.containers[j]
-        if (isAttachedToDom(el.containers[0])) {
+        var container = el.containers[j];
+        if (isAttachedToDom(container)) {
           break;
         }
       }
       if (j === -1) {
         // none of this instance's containers are attached, so remove from list of instances
-        instances.splice(i, 1)
+        instances.splice(i, 1);
       }
     }
   }
 
   function isAttachedToDom(elem) {
     if (elem === documentElement) {
-      return true
+      return true;
     } else if (elem.parentNode === null) {
-      return false
+      return false;
     }
-    var siblings = elem.parentNode.children
+    var siblings = elem.parentNode.children;
     for (var i = 0, c = siblings.length; i < c; i++) {
       if (siblings[i] === elem) {
-        return isAttachedToDom(elem.parentNode)
+        return isAttachedToDom(elem.parentNode);
       }
     }
-    return false
+    return false;
   }
 
   if (o.removeOnSpill === true) {
@@ -155,9 +155,9 @@ function dragula (initialContainers, options) {
       var el = dragulaInstances[i];
       for (var j = 0; j < el.containers.length; j++) {
         var container = el.containers[j];
-        var rect = container.getBoundingClientRect()
+        var rect = container.getBoundingClientRect();
         if ((clientX >= rect.left) && (clientX <= rect.left + rect.width) && (clientY >= rect.top) && (clientY <= rect.top + rect.height)) {
-          var thisArea = rect.width * rect.height
+          var thisArea = rect.width * rect.height;
           if (innerMostInstance === null || thisArea < area) {
             innerMostInstance = el.instance;
             area = thisArea;
@@ -254,7 +254,7 @@ function dragula (initialContainers, options) {
     }
 
     if (typeof clientX !== 'undefined' && typeof clientY !== 'undefined') {
-      var innerMostDrake = findInnerMostDragulaInstance(clientX, clientY)
+      var innerMostDrake = findInnerMostDragulaInstance(clientX, clientY);
       if (drake !== innerMostDrake) {
         return;
       }
