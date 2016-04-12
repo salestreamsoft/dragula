@@ -26,6 +26,8 @@ function dragula (initialContainers, options) {
   var _renderTimer; // timer for setTimeout renderMirrorImage
   var _lastDropTarget = null; // last container item was over
   var _grabbed; // holds mousedown context until first mousemove
+  var _fromIndex; // the index of the element being dragged when drag began
+  var _toIndex; // the index of the element being dragged when drag ended
 
   var o = options || {};
   if (o.moves === void 0) { o.moves = always; }
@@ -299,7 +301,7 @@ function dragula (initialContainers, options) {
       for (var i = 0; i < context.source.children.length; i++) {
         _initialItems.push(context.source.children[i]);
       }
-      drake.fromIndex = _initialItems.indexOf(_item);
+      _fromIndex = _initialItems.indexOf(_item);
     }
 
     drake.dragging = true;
@@ -342,8 +344,8 @@ function dragula (initialContainers, options) {
     } else {
       cancel();
     }
-    if (o.drop_marker && drake.toIndex !== null) {
-      drake.emit('moved', drake.fromIndex, drake.toIndex);
+    if (o.drop_marker && _toIndex !== null) {
+      drake.emit('moved', _fromIndex, _toIndex);
     }
   }
 
@@ -536,15 +538,15 @@ function dragula (initialContainers, options) {
 
     if (insertMarkerAt === null) {
       hideDropMarker(container);
-      drake.toIndex = null;
+      _toIndex = null;
     } else if (insertMarkerAt === -1) {
       showDropMarker(container);
-      drake.toIndex = _initialLength - 1;
+      _toIndex = _initialLength - 1;
     } else {
       showDropMarker(container, _initialItems[insertMarkerAt]);
-      drake.toIndex = insertMarkerAt;
-      if (drake.toIndex > drake.fromIndex) {
-        drake.toIndex--;
+      _toIndex = insertMarkerAt;
+      if (_toIndex > _fromIndex) {
+        _toIndex--;
       }
     }
   }
