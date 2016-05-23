@@ -95,9 +95,11 @@ function dragula (initialContainers, options) {
       return false;
     }
     var siblings = elem.parentNode.children;
-    for (var i = 0, c = siblings.length; i < c; i++) {
-      if (siblings[i] === elem) {
-        return isAttachedToDom(elem.parentNode);
+    if(typeof siblings === 'object' && siblings.length > 0) {
+      for (var i = 0, c = siblings.length; i < c; i++) {
+        if (siblings[i] === elem) {
+          return isAttachedToDom(elem.parentNode);
+        }
       }
     }
     return false;
