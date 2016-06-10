@@ -208,6 +208,11 @@ function dragula (initialContainers, options) {
     if (e.clientX !== void 0 && e.clientX === _moveX && e.clientY !== void 0 && e.clientY === _moveY) {
       return;
     }
+    // start drag and drop mode only once the mouse has moved a great enough distance; this makes sloppier clicks
+    // (ones with a tiny bit of movement) still register as clicks and thus improves the usability factor
+    if (e.clientX !== void 0 && (Math.abs(e.clientX - _moveX) <= 10) && e.clientY !== void 0 && (Math.abs(e.clientY - _moveY) <= 10)) {
+      return;
+    }
     if (o.ignoreInputTextSelection) {
       var clientX = getCoord('clientX', e);
       var clientY = getCoord('clientY', e);
